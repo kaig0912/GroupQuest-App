@@ -216,9 +216,3 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
-
-# GroupQuest local data
-data/
-uploads/
-.DS_Store
-*.swo
