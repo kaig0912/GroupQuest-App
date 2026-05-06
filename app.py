@@ -1,7 +1,7 @@
 import streamlit as st
 from datetime import datetime
 
-st.set_page_config(page_title="GroupQuest", page_icon="🎯", layout="centered")
+st.set_page_config(page_title="GroupQuest", page_icon="🏆", layout="centered")
 
 # --- minimal styling ---
 st.markdown("""
@@ -50,7 +50,7 @@ if not st.session_state.username:
 
 # --- header ---
 user = st.session_state.username
-st.markdown(f"### 🎯 GroupQuest &nbsp; <span style='font-size:.85rem;color:#999;font-weight:400'>Hi, {user} 👋</span>", unsafe_allow_html=True)
+st.markdown(f"### 🏆 GroupQuest &nbsp; <span style='font-size:.85rem;color:#999;font-weight:400'>Hi, {user} 👋</span>", unsafe_allow_html=True)
 st.divider()
 
 # --- tabs ---
