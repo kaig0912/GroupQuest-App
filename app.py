@@ -7,25 +7,27 @@ st.set_page_config(page_title="GroupQuest", page_icon="🏆", layout="centered")
 st.markdown("""
 <style>
     .block-container { max-width: 680px; padding-top: 2rem; }
+    .stButton > button { min-width: 90px; }
     h1, h2, h3 { font-weight: 700; }
     .tag {
         display: inline-block;
-        background: #f0f0f0;
-        color: #444;
+        background: rgba(128, 128, 128, 0.16);
+        color: inherit;
         font-size: 0.72rem;
-        padding: 2px 10px;
+        padding: 3px 10px;
         border-radius: 99px;
-        margin-right: 4px;
+        margin: 3px 4px 3px 0;
     }
-    .muted { color: #777; font-size: .9rem; }
+    .muted { opacity: .72; font-size: .9rem; margin-bottom: .15rem; }
     .empty-box {
-        background: #fafafa;
-        border: 1px dashed #ddd;
+        background: rgba(128, 128, 128, 0.08);
+        border: 1px dashed rgba(128, 128, 128, 0.35);
         border-radius: 12px;
         padding: 1rem;
-        color: #666;
+        opacity: .8;
     }
     hr { border: none; border-top: 1px solid #eee; margin: 1.5rem 0; }
+    div[data-testid="stHorizontalBlock"] { gap: .8rem; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -51,6 +53,9 @@ if "xp" not in st.session_state:
 if "next_post_id" not in st.session_state:
     st.session_state.next_post_id = 4
 
+if "checkin_message" not in st.session_state:
+    st.session_state.checkin_message = ""
+
 # --- login ---
 if not st.session_state.username:
     st.title("🎯 GroupQuest")
@@ -64,14 +69,12 @@ if not st.session_state.username:
 
 # --- header ---
 user = st.session_state.username
-header_col1, header_col2 = st.columns([4, 1])
-with header_col1:
-    user_xp = st.session_state.xp.get(user, 0)
-    st.markdown(f"### 🏆 GroupQuest &nbsp; <span style='font-size:.85rem;color:#999;font-weight:400'>Hi, {user} 👋 · {user_xp} XP</span>", unsafe_allow_html=True)
-with header_col2:
-    if st.button("Logout"):
-        st.session_state.username = ""
-        st.rerun()
+user_xp = st.session_state.xp.get(user, 0)
+st.markdown("### 🏆 GroupQuest")
+st.caption(f"Hi, {user} 👋 · {user_xp} XP")
+if st.button("Logout", key="logout_button"):
+    st.session_state.username = ""
+    st.rerun()
 st.divider()
 
 # --- tabs ---
@@ -80,12 +83,16 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(["Challenges", "Feed", "Erstellen", "Mein
 
 # ── TAB 1: CHALLENGES ──────────────────────────────
 with tab1:
+    if st.session_state.checkin_message:
+        st.success(st.session_state.checkin_message)
+        st.session_state.checkin_message = ""
     search = st.text_input("Challenge suchen", placeholder="z. B. lesen, Fitness, Ernährung ...")
     selected_category = st.selectbox("Kategorie filtern", ["Alle", "Fitness", "Bildung", "Ernährung", "Mindset"])
 
     visible_challenges = []
     for challenge in st.session_state.challenges:
-        matches_search = search.lower() in challenge["title"].lower() or search.lower() in challenge["desc"].lower() or search.lower() in challenge["goal"].lower()
+        search_term = search.strip().lower()
+        matches_search = search_term in challenge["title"].lower() or search_term in challenge["desc"].lower() or search_term in challenge["goal"].lower()
         matches_category = selected_category == "Alle" or challenge["category"] == selected_category
         if matches_search and matches_category:
             visible_challenges.append(challenge)
@@ -96,14 +103,14 @@ with tab1:
     for c in visible_challenges:
         is_member = user in c["members"]
 
-        with st.container():
+        with st.container(border=True):
             col1, col2 = st.columns([4, 1])
             with col1:
                 st.markdown(f"**{c['title']}**")
                 st.caption(c["desc"])
                 st.markdown(f"<div class='muted'>Ziel: {c['goal']}</div>", unsafe_allow_html=True)
                 st.markdown(f"<div class='muted'>Teilnehmer: {', '.join(c['members'])}</div>", unsafe_allow_html=True)
-                progress_value = min(c.get("progress", 0) / c["days"], 1)
+                progress_value = min(c.get("progress", 0) / max(c["days"], 1), 1)
                 st.progress(progress_value)
                 st.markdown(
                     f'<span class="tag">{c["category"]}</span>'
@@ -129,46 +136,57 @@ with tab1:
                             save_changes = st.form_submit_button("Änderungen speichern")
 
                         if save_changes:
-                            c["title"] = edited_title.strip()
-                            c["desc"] = edited_desc.strip()
-                            c["goal"] = edited_goal.strip()
-                            c["category"] = edited_category
-                            c["days"] = edited_days
-                            st.success("Challenge wurde aktualisiert.")
-                            st.rerun()
+                            if edited_title.strip() and edited_desc.strip() and edited_goal.strip():
+                                c["title"] = edited_title.strip()
+                                c["desc"] = edited_desc.strip()
+                                c["goal"] = edited_goal.strip()
+                                c["category"] = edited_category
+                                c["days"] = edited_days
+                                c["progress"] = min(c.get("progress", 0), edited_days)
+                                st.success("Challenge wurde aktualisiert.")
+                                st.rerun()
+                            else:
+                                st.warning("Name, Beschreibung und Ziel dürfen nicht leer sein.")
 
                         if st.button("Challenge löschen", key=f"delete_challenge_{c['id']}"):
                             st.session_state.challenges = [challenge for challenge in st.session_state.challenges if challenge["id"] != c["id"]]
+                            st.session_state.feed = [post for post in st.session_state.feed if post.get("challenge") != c["title"]]
                             st.rerun()
             with col2:
                 if is_member:
                     st.markdown("<br>", unsafe_allow_html=True)
                     with st.popover("Check-in"):
-                        text = st.text_area("Was hast du heute gemacht?", key=f"ci_{c['id']}", height=80)
-                        if st.button("Einreichen", key=f"btn_ci_{c['id']}"):
+                        with st.form(f"checkin_form_{c['id']}", clear_on_submit=True):
+                            text = st.text_area("Was hast du heute gemacht?", key=f"ci_{c['id']}", height=80)
+                            submitted_checkin = st.form_submit_button("Einreichen")
+
+                        if submitted_checkin:
                             if text.strip():
-                                c["checkins"].append({"user": user, "text": text, "time": datetime.now().strftime("%d.%m.%Y %H:%M")})
+                                clean_text = text.strip()
+                                c["checkins"].append({"user": user, "text": clean_text, "time": datetime.now().strftime("%d.%m.%Y %H:%M")})
                                 c["progress"] = min(c.get("progress", 0) + 1, c["days"])
                                 st.session_state.xp[user] = st.session_state.xp.get(user, 0) + 10
                                 st.session_state.feed.insert(0, {
                                     "id": st.session_state.next_post_id,
                                     "user": user,
                                     "challenge": c["title"],
-                                    "text": text,
+                                    "text": clean_text,
                                     "time": "gerade eben",
                                     "reactions": {},
                                     "comments": []
                                 })
                                 st.session_state.next_post_id += 1
-                                st.success("Gespeichert! Dein Fortschritt wurde aktualisiert. ✅")
+                                st.session_state.checkin_message = "Gespeichert! Dein Fortschritt wurde aktualisiert. ✅"
                                 st.rerun()
+                            else:
+                                st.warning("Bitte zuerst einen kurzen Check-in-Text eingeben.")
                 else:
                     st.markdown("<br>", unsafe_allow_html=True)
                     if st.button("Beitreten", key=f"join_{c['id']}"):
                         c["members"].append(user)
                         st.rerun()
 
-        st.markdown("<hr>", unsafe_allow_html=True)
+        # st.markdown("<hr>", unsafe_allow_html=True)
 
 
 # ── TAB 2: FEED ────────────────────────────────────
@@ -176,35 +194,39 @@ with tab2:
     if not st.session_state.feed:
         st.write("Noch keine Posts. Mach einen Check-in!")
     for post in st.session_state.feed:
-        post.setdefault("id", st.session_state.next_post_id)
+        if "id" not in post:
+            post["id"] = st.session_state.next_post_id
+            st.session_state.next_post_id += 1
         post.setdefault("reactions", {})
         post.setdefault("comments", [])
 
-        st.markdown(f"**{post['user']}** · *{post['challenge']}* · <span style='color:#aaa;font-size:.8rem'>{post['time']}</span>", unsafe_allow_html=True)
-        st.write(post["text"])
+        with st.container(border=True):
+            st.markdown(f"**{post['user']}** · *{post['challenge']}* · <span style='opacity:.65;font-size:.8rem'>{post['time']}</span>", unsafe_allow_html=True)
+            st.write(post["text"])
 
-        reaction_cols = st.columns(4)
-        for emoji_index, emoji in enumerate(["🔥", "👏", "✅", "💪"]):
-            count = post["reactions"].get(emoji, 0)
-            if reaction_cols[emoji_index].button(f"{emoji} {count}", key=f"reaction_{post['id']}_{emoji}"):
-                post["reactions"][emoji] = count + 1
-                st.rerun()
+            reaction_cols = st.columns(4)
+            for emoji_index, emoji in enumerate(["🔥", "👏", "✅", "💪"]):
+                count = post["reactions"].get(emoji, 0)
+                if reaction_cols[emoji_index].button(f"{emoji} {count}", key=f"reaction_{post['id']}_{emoji}"):
+                    post["reactions"][emoji] = count + 1
+                    st.rerun()
 
-        with st.expander("Kommentare"):
-            if not post["comments"]:
-                st.caption("Noch keine Kommentare.")
-            for comment in post["comments"]:
-                st.write(f"**{comment['user']}**: {comment['text']}")
+            with st.expander("Kommentare"):
+                if not post["comments"]:
+                    st.caption("Noch keine Kommentare.")
+                for comment in post["comments"]:
+                    st.write(f"**{comment['user']}**: {comment['text']}")
 
-            with st.form(f"comment_form_{post['id']}", clear_on_submit=True):
-                comment_text = st.text_input("Kommentar schreiben")
-                submitted_comment = st.form_submit_button("Kommentieren")
+                with st.form(f"comment_form_{post['id']}", clear_on_submit=True):
+                    comment_text = st.text_input("Kommentar schreiben")
+                    submitted_comment = st.form_submit_button("Kommentieren")
 
-            if submitted_comment and comment_text.strip():
-                post["comments"].append({"user": user, "text": comment_text.strip()})
-                st.rerun()
-
-        st.markdown("<hr>", unsafe_allow_html=True)
+                if submitted_comment:
+                    if comment_text.strip():
+                        post["comments"].append({"user": user, "text": comment_text.strip()})
+                        st.rerun()
+                    else:
+                        st.warning("Bitte zuerst einen Kommentar eingeben.")
 
 
 # ── TAB 3: ERSTELLEN ───────────────────────────────
@@ -225,7 +247,7 @@ with tab3:
 
     if submitted:
         if title.strip() and desc.strip() and goal.strip():
-            new_id = max(c["id"] for c in st.session_state.challenges) + 1
+            new_id = max([c["id"] for c in st.session_state.challenges], default=0) + 1
             st.session_state.challenges.append({
                 "id": new_id,
                 "title": title.strip(),
@@ -268,25 +290,25 @@ with tab4:
             st.caption("Noch keine Badges. Mach deinen ersten Check-in!")
 
         for c in my_challenges:
-            progress_days = min(c.get("progress", 0), c["days"])
-            progress_percent = int((progress_days / c["days"]) * 100)
+            with st.container(border=True):
+                progress_days = min(c.get("progress", 0), c["days"])
+                progress_percent = int((progress_days / max(c["days"], 1)) * 100)
 
-            st.markdown(f"**{c['title']}**")
-            st.caption(c["goal"])
-            st.progress(progress_days / c["days"])
-            st.write(f"Tag {progress_days} von {c['days']} · {progress_percent}% geschafft")
-            if progress_percent >= 100:
-                st.success("Badge: Challenge abgeschlossen 🏆")
-            elif progress_percent >= 50:
-                st.info("Badge: Halbzeit erreicht 🏅")
+                st.markdown(f"**{c['title']}**")
+                st.caption(c["goal"])
+                st.progress(progress_days / max(c["days"], 1))
+                st.write(f"Tag {progress_days} von {c['days']} · {progress_percent}% geschafft")
+                if progress_percent >= 100:
+                    st.success("Badge: Challenge abgeschlossen 🏆")
+                elif progress_percent >= 50:
+                    st.info("Badge: Halbzeit erreicht 🏅")
 
-            user_checkins = [checkin for checkin in c["checkins"] if checkin["user"] == user]
-            st.caption(f"Deine Check-ins in dieser Challenge: {len(user_checkins)}")
-            if user_checkins:
-                with st.expander("Meine bisherigen Check-ins anzeigen"):
-                    for checkin in reversed(user_checkins):
-                        st.write(f"{checkin['time']}: {checkin['text']}")
-            st.markdown("<hr>", unsafe_allow_html=True)
+                user_checkins = [checkin for checkin in c["checkins"] if checkin["user"] == user]
+                st.caption(f"Deine Check-ins in dieser Challenge: {len(user_checkins)}")
+                if user_checkins:
+                    with st.expander("Meine bisherigen Check-ins anzeigen"):
+                        for checkin in reversed(user_checkins):
+                            st.write(f"{checkin['time']}: {checkin['text']}")
 
 
 # ── TAB 5: LEADERBOARD ─────────────────────────────
@@ -303,21 +325,27 @@ with tab5:
         st.markdown("<div class='empty-box'>Noch keine Punkte gesammelt.</div>", unsafe_allow_html=True)
     else:
         for index, player in enumerate(ranking, start=1):
-            st.write(f"#{index} · {player} · {st.session_state.xp.get(player, 0)} XP")
+            st.markdown(f"**#{index}** · {player} · {st.session_state.xp.get(player, 0)} XP")
 
     st.markdown("<hr>", unsafe_allow_html=True)
     st.markdown("**Leaderboard pro Challenge**")
+    if not st.session_state.challenges:
+        st.markdown("<div class='empty-box'>Keine Challenge verfügbar.</div>", unsafe_allow_html=True)
+        st.stop()
+    challenge_titles = [challenge["title"] for challenge in st.session_state.challenges]
+    challenge_title = st.selectbox("Challenge auswählen", challenge_titles, key="leaderboard_challenge_select")
+    selected_challenge = next((challenge for challenge in st.session_state.challenges if challenge["title"] == challenge_title), None)
 
-    challenge_title = st.selectbox("Challenge auswählen", [challenge["title"] for challenge in st.session_state.challenges])
-    selected_challenge = next(challenge for challenge in st.session_state.challenges if challenge["title"] == challenge_title)
+    if selected_challenge is None:
+        st.markdown("<div class='empty-box'>Keine Challenge verfügbar.</div>", unsafe_allow_html=True)
+    else:
+        challenge_ranking = []
+        for member in selected_challenge["members"]:
+            member_checkins = [checkin for checkin in selected_challenge["checkins"] if checkin["user"] == member]
+            challenge_ranking.append((member, len(member_checkins)))
 
-    challenge_ranking = []
-    for member in selected_challenge["members"]:
-        member_checkins = [checkin for checkin in selected_challenge["checkins"] if checkin["user"] == member]
-        challenge_ranking.append((member, len(member_checkins)))
+        challenge_ranking.sort(key=lambda item: item[1], reverse=True)
 
-    challenge_ranking.sort(key=lambda item: item[1], reverse=True)
-
-    for index, item in enumerate(challenge_ranking, start=1):
-        member, checkin_count = item
-        st.write(f"#{index} · {member} · {checkin_count} Check-ins")
+        for index, item in enumerate(challenge_ranking, start=1):
+            member, checkin_count = item
+            st.markdown(f"**#{index}** · {member} · {checkin_count} Check-ins")
